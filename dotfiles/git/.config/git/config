@@ -1,0 +1,37 @@
+[user]
+    name = Vinay
+    email = vinaywilliams00@gmail.com
+
+[init]
+    defaultBranch = main
+
+[pull]
+    rebase = false
+
+[push]
+    autoSetupRemote = true
+    default = simple
+
+[fetch]
+    prune = true
+
+[rebase]
+    autoStash = true
+
+[diff]
+    algorithm = histogram
+    colorMoved = default
+
+[merge]
+    conflictStyle = zdiff3
+
+[core]
+    excludesfile = ~/.config/git/ignore
+
+[credential "https://github.com"]
+    helper =
+    helper = !gh auth git-credential
+
+[credential "https://gist.github.com"]
+    helper =
+    helper = !gh auth git-credential

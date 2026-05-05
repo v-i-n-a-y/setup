@@ -1,0 +1,42 @@
+{
+  "linux": [
+    {
+      "command": "sudo apt-get update",
+      "description": "Update package list"
+    },
+    {
+      "command": "sudo apt-get upgrade -y",
+      "description": "Upgrade installed packages"
+    },
+    {
+      "command": "sudo snap refresh",
+      "description": "Snap refresh all applications"
+    },
+    {
+      "command": "sudo apt-get dist-upgrade -y",
+      "description": "Perform full upgrade"
+    },
+    {
+      "command": "sudo apt-get autoremove -y",
+      "description": "Remove unused packages"
+    }
+  ],
+  "darwin": [
+    {
+      "command": "brew update",
+      "description": "Update Homebrew"
+    },
+    {
+      "command": "brew upgrade",
+      "description": "Upgrade Homebrew packages"
+    },
+    {
+      "command": "softwareupdate -ia",
+      "description": "Update macOS"
+    },
+    {
+      "command": "mas upgrade",
+      "description": "Upgrade all Mac App Store applications"
+    }
+  ]
+}

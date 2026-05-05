@@ -1,1 +1,2 @@
-*.DS_Store
+.DS_Store
+cron/update.sh

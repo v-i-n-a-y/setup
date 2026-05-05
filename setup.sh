@@ -1,210 +1,164 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
-# Vinay's little setup tool for Linux and MacOS
-# I move computers or crash them too often and
-# I am lazy
+# Vinay's bootstrap for fresh Linux / macOS boxes.
+# I move computers or crash them too often. I am lazy.
 
-# Check if a command exists
-command_exists() {
-    command -v "$1" &>/dev/null
-}
+set -euo pipefail
 
-# Installs Homebrew
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DOTFILES_DIR="$SCRIPT_DIR/dotfiles"
+STOW_PACKAGES=(nvim fish git tmux)
+
+is_macos() { [[ "$OSTYPE" == "darwin"* ]]; }
+is_linux() { [[ "$OSTYPE" == "linux-gnu"* ]]; }
+command_exists() { command -v "$1" &>/dev/null; }
+
 install_homebrew() {
-    if ! command_exists brew; then
+    if command_exists brew; then
+        echo "Homebrew already installed."
+    else
         echo "Installing Homebrew..."
         /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-    else
-        echo "Homebrew is already installed."
+    fi
+    if [[ -x /opt/homebrew/bin/brew ]]; then
+        eval "$(/opt/homebrew/bin/brew shellenv)"
+    elif [[ -x /usr/local/bin/brew ]]; then
+        eval "$(/usr/local/bin/brew shellenv)"
     fi
 }
 
-# Installs fish
-install_fish() {
-    if [[ "$OSTYPE" == "linux-gnu"* ]]; then
-        sudo apt-get update
-        sudo apt-get install -y fish
-    elif [[ "$OSTYPE" == "darwin"* ]]; then
-        brew install fish
-    else
-        echo "Unsupported OS for Fish installation."
-        exit 1
-    fi
+install_brew_bundle() {
+    echo "Installing brew formulae from Brewfile..."
+    brew bundle install --file="$SCRIPT_DIR/Brewfile"
 }
 
-# Installs Neovim
-install_neovim() {
+install_apt_packages() {
+    sudo apt-get update
+    sudo apt-get install -y \
+        fish tmux direnv stow rclone build-essential git curl \
+        xclip wl-clipboard pre-commit
+}
+
+install_neovim_linux() {
     if command_exists nvim; then
-        echo "Neovim is already installed."
-    else
-        if [[ "$OSTYPE" == "linux-gnu"* ]]; then
-            echo "Installing Neovim via apt-get..."
-            sudo apt-get update
-            sudo apt-get install -y neovim
-
-            # Install latest Neovim from GitHub
-            # Can remove is apt-get starts having the latest version...
-            echo "Installing the latest Neovim from GitHub..."
-            curl -LO https://github.com/neovim/neovim/releases/latest/download/nvim-linux64.tar.gz
-            tar -xvf nvim-linux64.tar.gz
-            sudo mv nvim-linux64/bin/nvim /usr/local/bin
-            rm -rf nvim-linux64 nvim-linux64.tar.gz
-        elif [[ "$OSTYPE" == "darwin"* ]]; then
-            brew install neovim
-        else
-            echo "Unsupported OS for Neovim installation."
-            exit 1
-        fi
+        echo "Neovim already installed."
+        return
     fi
+    local arch tarball tmp
+    arch="$(uname -m)"
+    case "$arch" in
+        x86_64)  tarball="nvim-linux-x86_64.tar.gz" ;;
+        aarch64) tarball="nvim-linux-arm64.tar.gz" ;;
+        *) echo "Unsupported arch for Neovim: $arch"; exit 1 ;;
+    esac
+    echo "Installing Neovim from GitHub ($tarball)..."
+    tmp="$(mktemp -d)"
+    curl -fL -o "$tmp/$tarball" "https://github.com/neovim/neovim/releases/latest/download/$tarball"
+    tar -xzf "$tmp/$tarball" -C "$tmp"
+    sudo cp -R "$tmp"/nvim-linux-*/. /usr/local/
+    rm -rf "$tmp"
 }
 
-# Installs GCC
-install_gcc() {
-    if ! command_exists gcc; then
-        if [[ "$OSTYPE" == "linux-gnu"* ]]; then
-            sudo apt-get install -y build-essential
-        elif [[ "$OSTYPE" == "darwin"* ]]; then
-            brew install gcc
-        else
-            echo "Unsupported OS for GCC installation."
-            exit 1
-        fi
-    else
-        echo "GCC is already installed."
+install_uv_linux() {
+    if command_exists uv; then
+        echo "uv already installed."
+        return
     fi
+    curl -LsSf https://astral.sh/uv/install.sh | sh
 }
 
-# Installs tmux
-install_tmux() {
-    if ! command_exists tmux; then
-        if [[ "$OSTYPE" == "linux-gnu"* ]]; then
-            sudo apt-get install -y tmux
-        elif [[ "$OSTYPE" == "darwin"* ]]; then
-            brew install tmux
-        else
-            echo "Unsupported OS for tmux installation."
-            exit 1
-        fi
-    else
-        echo "tmux is already installed."
+install_gh_linux() {
+    if command_exists gh; then
+        echo "gh already installed."
+        return
     fi
-}
-
-# Installs rclone
-install_rclone() {
-    if ! command_exists rclone; then
-        if [[ "$OSTYPE" == "linux-gnu"* ]]; then
-            curl https://rclone.org/install.sh | sudo bash
-        elif [[ "$OSTYPE" == "darwin"* ]]; then
-            brew install rclone
-        else
-            echo "Unsupported OS for rclone installation."
-            exit 1
-        fi
-    else
-        echo "rclone is already installed."
-    fi
+    echo "Adding GitHub CLI apt repo and installing gh..."
+    sudo mkdir -p -m 755 /etc/apt/keyrings
+    curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+        | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null
+    sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+        | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+    sudo apt-get update
+    sudo apt-get install -y gh
 }
 
 install_rust() {
-    if ! command_exists rustc; then
-        if [[ "$OSTYPE" == "linux-gnu"* || "$OSTYPE" == "darwin"* ]]; then
-            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-        else
-            echo "Unsupported OS for Rust installation."
-            exit 1
-        fi
-    else
-        echo "Rust is already installed."
+    if command_exists rustc; then
+        echo "Rust already installed."
+        return
+    fi
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+}
+
+ensure_fish_in_shells() {
+    local fish_path
+    fish_path="$(command -v fish)"
+    if ! grep -qxF "$fish_path" /etc/shells; then
+        echo "Adding $fish_path to /etc/shells..."
+        echo "$fish_path" | sudo tee -a /etc/shells > /dev/null
     fi
 }
 
-# Installs Miniconda3
-install_miniconda() {
-    if command_exists conda; then
-        echo "Miniconda is already installed."
-    else
-        if [[ "$OSTYPE" == "linux-gnu"* ]]; then
-            echo "Downloading and installing Miniconda for Linux..."
-            curl -LO https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
-            chmod +x Miniconda3-latest-Linux-x86_64.sh
-            ./Miniconda3-latest-Linux-x86_64.sh -b -f
-            rm -f Miniconda3-latest-Linux-x86_64.sh
-        elif [[ "$OSTYPE" == "darwin"* ]]; then
-            echo "Downloading and installing Miniconda for macOS..."
-            curl -LO https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-x86_64.sh
-            chmod +x Miniconda3-latest-MacOSX-x86_64.sh
-            ./Miniconda3-latest-MacOSX-x86_64.sh -b -f
-            rm -f Miniconda3-latest-MacOSX-x86_64.sh
-        else
-            echo "Unsupported OS for Miniconda installation."
-            exit 1
-        fi
+# Move any pre-existing regular files at stow's targets out of the way so stow can take over.
+park_existing_targets() {
+    local pkg src_root rel target backup ts
+    ts="$(date +%Y%m%d%H%M%S)"
+    for pkg in "${STOW_PACKAGES[@]}"; do
+        src_root="$DOTFILES_DIR/$pkg"
+        [[ -d "$src_root" ]] || continue
+        while IFS= read -r -d '' src; do
+            rel="${src#$src_root/}"
+            target="$HOME/$rel"
+            if [[ -e "$target" && ! -L "$target" ]]; then
+                backup="$target.pre-stow.$ts"
+                echo "Backing up $target -> $backup"
+                mv "$target" "$backup"
+            fi
+        done < <(find "$src_root" -type f -print0)
+    done
+}
+
+link_dotfiles() {
+    if ! command_exists stow; then
+        echo "stow not installed — cannot link dotfiles."
+        exit 1
     fi
+    park_existing_targets
+    stow --dir="$DOTFILES_DIR" --target="$HOME" --restow "${STOW_PACKAGES[@]}"
+    echo "Dotfiles linked via stow."
 }
 
-
-# Installs user settings
-install_user_settings() {
-    echo "Installing Neovim user settings..."
-    mkdir -p ~/.config/nvim
-    cp ./nvim/* ~/.config/nvim/
-
-    echo "Installing Fish settings..."
-    mkdir -p ~/.config/fish
-    cp ./fish/* ~/.config/fish/
-
-    if ! grep -q "$(which fish)" /etc/shells; then
-        echo "Adding Fish to /etc/shells..."
-        echo "$(which fish)" | sudo tee -a /etc/shells > /dev/null
-    else
-        echo "Fish shell is already in /etc/shells."
-    fi
-
-    echo "Changing default shell to Fish..."
-    chsh -s "$(which fish)"
-}
-
-# Install all required packages and configurations
-install() {
-    echo "Installing Fish shell..."
-    install_fish
-
-    echo "Installing Neovim..."
-    install_neovim
-
-    echo "Installing Miniconda..."
-    install_miniconda
-
-    echo "Installing tmux..."
-    install_tmux
-
-    echo "Installing rclone..."
-    install_rclone
-
-    echo "Installing rust..."
-    install_rust
-
-    echo "Installing GCC..."
-    install_gcc
-
-    echo "Installing user settings..."
-    install_user_settings
-}
-
-# Main script logic
-if [[ "$OSTYPE" == "darwin"* ]]; then
+if is_macos; then
     echo "Detected macOS"
     install_homebrew
-    install
-
-elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+    install_brew_bundle
+    install_rust
+elif is_linux; then
     echo "Detected Linux"
-    install
-
+    install_apt_packages
+    install_neovim_linux
+    install_uv_linux
+    install_gh_linux
+    install_rust
 else
-    echo "Unsupported operating system. Cannot proceed with installation."
-    echo " Obviously I don't like Windows..."
+    echo "Unsupported OS."
     exit 1
 fi
 
+ensure_fish_in_shells
+link_dotfiles
+
+# If this repo is a git checkout and pre-commit is available, wire up the hooks.
+if [[ -d "$SCRIPT_DIR/.git" ]] \
+    && command_exists pre-commit \
+    && [[ -f "$SCRIPT_DIR/.pre-commit-config.yaml" ]]; then
+    echo "Installing pre-commit hooks for this repo..."
+    (cd "$SCRIPT_DIR" && pre-commit install)
+fi
+
+echo
+echo "Done."
+echo "  - Make fish login shell: chsh -s \"\$(command -v fish)\""
+echo "  - Bootstrap SSH key:     ./scripts/ssh-bootstrap.sh"
+echo "  - Schedule OS updates:   ./cron/install.sh"
