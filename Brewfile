@@ -1,6 +1,7 @@
 brew "fish"
 brew "neovim"
 brew "tmux"
+brew "tree"
 brew "rclone"
 brew "uv"
 brew "direnv"

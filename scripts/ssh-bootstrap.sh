@@ -17,6 +17,13 @@ if [[ -f "$KEY" ]]; then
     echo "Existing key at $KEY — keeping it."
 else
     ssh-keygen -t ed25519 -C "$EMAIL" -f "$KEY" -N ""
+    echo "Note: key created with no passphrase. Add one later with: ssh-keygen -p -f \"$KEY\""
+fi
+
+# Reconstruct the public half if it's missing (e.g. only the private key was
+# copied over from another machine) so the cat/clipboard step below doesn't abort.
+if [[ ! -f "$KEY.pub" ]]; then
+    ssh-keygen -y -f "$KEY" > "$KEY.pub"
 fi
 
 if [[ -n "${SSH_AUTH_SOCK:-}" ]]; then
@@ -29,12 +36,22 @@ echo "Public key ($PUB):"
 cat "$PUB"
 echo
 
+copy_failed() {
+    echo "(Clipboard copy failed — copy the key printed above manually.)"
+}
+
+# Prefer the tool that matches the session type (Wayland -> wl-copy, X11 -> xclip)
+# rather than whichever happens to be installed first; both are installed on Linux.
 if command -v pbcopy >/dev/null 2>&1; then
-    pbcopy < "$PUB" && echo "Copied to clipboard (pbcopy)."
-elif command -v xclip >/dev/null 2>&1; then
-    xclip -selection clipboard < "$PUB" && echo "Copied to clipboard (xclip)."
+    pbcopy < "$PUB" && echo "Copied to clipboard (pbcopy)." || copy_failed
+elif [[ -n "${WAYLAND_DISPLAY:-}" ]] && command -v wl-copy >/dev/null 2>&1; then
+    wl-copy < "$PUB" && echo "Copied to clipboard (wl-copy)." || copy_failed
+elif [[ -n "${DISPLAY:-}" ]] && command -v xclip >/dev/null 2>&1; then
+    xclip -selection clipboard < "$PUB" && echo "Copied to clipboard (xclip)." || copy_failed
 elif command -v wl-copy >/dev/null 2>&1; then
-    wl-copy < "$PUB" && echo "Copied to clipboard (wl-copy)."
+    wl-copy < "$PUB" && echo "Copied to clipboard (wl-copy)." || copy_failed
+elif command -v xclip >/dev/null 2>&1; then
+    xclip -selection clipboard < "$PUB" && echo "Copied to clipboard (xclip)." || copy_failed
 else
     echo "(No clipboard tool found — copy manually.)"
 fi

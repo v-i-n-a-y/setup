@@ -12,8 +12,7 @@ mkdir -p "$INSTALL_DIR" "$CONFIG_DIR"
 
 python3 "$SCRIPT_DIR/generate.py"
 
-mv "$SCRIPT_DIR/update.sh" "$INSTALL_DIR/update.sh"
-chmod +x "$INSTALL_DIR/update.sh"
+mv "$SCRIPT_DIR/update.sh" "$INSTALL_DIR/update.sh"  # generate.py already chmods it 0755
 
 touch "$HOME/update.log"
 
@@ -28,13 +27,17 @@ EOF
 fi
 
 EXISTING="$(crontab -l 2>/dev/null || true)"
-echo "$EXISTING" > "$HOME/crontab_backup_$(date +%Y%m%d%H%M%S).txt"
 
 if echo "$EXISTING" | grep -Fxq "$CRON_JOB"; then
     echo "Cron job already configured."
 else
+    # Back up only when we're about to change the crontab, and keep it out of $HOME.
+    echo "$EXISTING" > "$CONFIG_DIR/crontab.backup.$(date +%Y%m%d%H%M%S)"
     echo "Adding cron job: $CRON_JOB"
-    { [[ -n "$EXISTING" ]] && echo "$EXISTING"; echo "$CRON_JOB"; } | crontab -
+    # Drop any prior updater entry (e.g. an old path or schedule) before re-adding,
+    # so changing the schedule doesn't leave a duplicate monthly job behind.
+    REMAINING="$(echo "$EXISTING" | grep -v '/update.sh$' || true)"
+    { [[ -n "$REMAINING" ]] && echo "$REMAINING"; echo "$CRON_JOB"; } | crontab -
 fi
 
 echo "Done. Current crontab:"

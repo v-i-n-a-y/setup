@@ -1,5 +1,3 @@
-set nocompatible
-
 if $SHELL =~ "fish"
     set shell=/bin/sh
 endif
@@ -13,6 +11,15 @@ set autoindent
 
 set backspace=indent,eol,start
 set mouse=a
+
+" --- Quality-of-life (none of these are nvim defaults) ---
+set clipboard=unnamedplus   " yank/put through the system clipboard (ties into tmux yank)
+set undofile                " persist undo history across sessions
+set scrolloff=8             " keep context lines above/below the cursor
+set sidescrolloff=8
+set splitright              " new splits open to the right / below (matches tmux | and -)
+set splitbelow
+set inccommand=split        " live preview of :s/// substitutions
 
 set spelllang=en_gb
 

@@ -31,8 +31,8 @@
       "description": "Upgrade Homebrew packages"
     },
     {
-      "command": "softwareupdate -ia",
-      "description": "Update macOS"
+      "command": "sudo softwareupdate -ia",
+      "description": "Update macOS (needs passwordless sudo for /usr/sbin/softwareupdate)"
     },
     {
       "command": "mas upgrade",

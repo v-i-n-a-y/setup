@@ -13,7 +13,8 @@ Originally lived at <https://github.com/v-i-n-a-y/crontab-updater>.
 
 You'll be prompted y/N for each candidate update command. The selections are
 rendered into `~/.local/bin/update.sh` and a monthly cron entry is added
-(`0 2 1 * * ~/.local/bin/update.sh`). Output goes to `~/update.log`.
+(`0 2 1 * * <HOME>/.local/bin/update.sh` — stored as an absolute path, since
+cron does not expand `~`). Output goes to `~/update.log`.
 
 ## Telegram notifications (optional)
 

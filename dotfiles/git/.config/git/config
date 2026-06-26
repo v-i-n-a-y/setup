@@ -1,6 +1,8 @@
 [user]
     name = Vinay
-    email = vinaywilliams00@gmail.com
+    # GitHub noreply address: keeps a personal mailbox out of this public repo and
+    # out of commit metadata. Override per-repo (or via includeIf) on work boxes.
+    email = 51179948+v-i-n-a-y@users.noreply.github.com
 
 [init]
     defaultBranch = main
@@ -27,6 +29,12 @@
 
 [core]
     excludesfile = ~/.config/git/ignore
+
+[http]
+    postBuffer = 524288000
+
+[https]
+    postBuffer = 524288000
 
 [credential "https://github.com"]
     helper =

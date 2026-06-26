@@ -16,10 +16,12 @@ cd ~/setup
 ./setup.sh
 ```
 
-Re-running is safe. Every install step short-circuits when the tool is
-already present, and `stow --restow` is idempotent. Pre-existing regular
-files at stow's targets are moved aside to `<path>.pre-stow.<timestamp>`
-before the symlinks are placed, so nothing on disk is destroyed silently.
+Re-running is safe: package installs are idempotent (`brew bundle` and
+`apt-get install` skip already-installed packages), and the from-source steps
+(Neovim, uv, Rust, gh) short-circuit when the tool is already present.
+`stow --restow` is idempotent, and pre-existing regular files at stow's
+targets are moved aside to `<path>.pre-stow.<timestamp>` before the symlinks
+are placed, so nothing on disk is destroyed silently.
 
 After `setup.sh`, three optional follow-ups:
 
@@ -54,8 +56,9 @@ too old). `uv` and `rust` come from their respective install scripts.
 `xclip` and `wl-clipboard` are added so `ssh-bootstrap.sh` can copy
 the generated public key on both X11 and Wayland sessions.
 
-`mas` and `pre-commit` are macOS-only / handled differently on Linux as
-appropriate; the Brewfile is untouched on Linux.
+`mas` is macOS-only and has no Linux equivalent; the Brewfile is untouched on
+Linux. `pre-commit`, `uv`, and `gh` are installed on both platforms (via apt /
+official sources on Linux).
 
 ## Layout
 

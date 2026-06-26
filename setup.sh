@@ -18,7 +18,19 @@ install_homebrew() {
         echo "Homebrew already installed."
     else
         echo "Installing Homebrew..."
-        /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+        # Download first and check curl's exit status. Running the installer via
+        # `bash -c "$(curl ...)"` hides a curl failure: the substitution yields ""
+        # and `bash -c ""` exits 0, so a network error surfaces later as a
+        # confusing "brew: command not found".
+        local installer
+        installer="$(mktemp)"
+        if ! curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh -o "$installer"; then
+            echo "Failed to download the Homebrew installer." >&2
+            rm -f "$installer"
+            exit 1
+        fi
+        /bin/bash "$installer"
+        rm -f "$installer"
     fi
     if [[ -x /opt/homebrew/bin/brew ]]; then
         eval "$(/opt/homebrew/bin/brew shellenv)"
@@ -35,8 +47,12 @@ install_brew_bundle() {
 install_apt_packages() {
     sudo apt-get update
     sudo apt-get install -y \
-        fish tmux direnv stow rclone build-essential git curl \
-        xclip wl-clipboard pre-commit
+        fish tmux direnv stow rclone build-essential git curl
+    # These live in Ubuntu 'universe' / only-recent Debian. Install them in a
+    # separate call so one missing package on an older or minimal box doesn't
+    # abort the whole bootstrap before dotfiles/neovim/uv/gh/rust are set up.
+    sudo apt-get install -y xclip wl-clipboard pre-commit tree \
+        || echo "Warning: some optional apt packages were unavailable; continuing."
 }
 
 install_neovim_linux() {
@@ -111,6 +127,12 @@ park_existing_targets() {
             rel="${src#$src_root/}"
             target="$HOME/$rel"
             if [[ -e "$target" && ! -L "$target" ]]; then
+                # Skip if the target already resolves to the repo's own file through a
+                # folded parent directory symlink (stow tree-folding). Without this,
+                # `mv` would rename the repo's tracked file, corrupting the checkout.
+                if [[ "$target" -ef "$src" ]]; then
+                    continue
+                fi
                 backup="$target.pre-stow.$ts"
                 echo "Backing up $target -> $backup"
                 mv "$target" "$backup"
@@ -160,5 +182,5 @@ fi
 echo
 echo "Done."
 echo "  - Make fish login shell: chsh -s \"\$(command -v fish)\""
-echo "  - Bootstrap SSH key:     ./scripts/ssh-bootstrap.sh"
-echo "  - Schedule OS updates:   ./cron/install.sh"
+echo "  - Bootstrap SSH key:     $SCRIPT_DIR/scripts/ssh-bootstrap.sh"
+echo "  - Schedule OS updates:   $SCRIPT_DIR/cron/install.sh"
