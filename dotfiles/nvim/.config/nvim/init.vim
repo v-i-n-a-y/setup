@@ -12,14 +12,13 @@ set autoindent
 set backspace=indent,eol,start
 set mouse=a
 
-" --- Quality-of-life (none of these are nvim defaults) ---
-set clipboard=unnamedplus   " yank/put through the system clipboard (ties into tmux yank)
-set undofile                " persist undo history across sessions
-set scrolloff=8             " keep context lines above/below the cursor
+set clipboard=unnamedplus
+set undofile
+set scrolloff=8
 set sidescrolloff=8
-set splitright              " new splits open to the right / below (matches tmux | and -)
+set splitright
 set splitbelow
-set inccommand=split        " live preview of :s/// substitutions
+set inccommand=split
 
 set spelllang=en_gb
 
@@ -34,7 +33,6 @@ set wildmenu
 set title
 set showcmd
 set noshowmode
-
 set hlsearch
 set incsearch
 set showmatch
@@ -46,13 +44,16 @@ syntax enable
 set number
 set relativenumber
 
+highlight LineNr       guifg=#565f89
+highlight CursorLineNr guifg=#ff9e64 gui=bold
+highlight LineNrAbove  guifg=#bb9af7
+highlight LineNrBelow  guifg=#7aa2f7
+
 autocmd BufReadPost *
 \ if line("'\"") > 1 && line("'\"") <= line("$") |
 \   execute "normal! g`\"" |
 \ endif
 
-" Let the terminal background show through so vim matches the terminal theme.
 highlight Normal     guibg=NONE ctermbg=NONE
 highlight NonText    guibg=NONE ctermbg=NONE
-highlight LineNr     guibg=NONE ctermbg=NONE
 highlight SignColumn guibg=NONE ctermbg=NONE
