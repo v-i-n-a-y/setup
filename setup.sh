@@ -7,11 +7,42 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DOTFILES_DIR="$SCRIPT_DIR/dotfiles"
-STOW_PACKAGES=(nvim fish git tmux)
+DOTFILE_PACKAGES=(nvim fish git tmux)
+INSTALL_MODE="all"
 
 is_macos() { [[ "$OSTYPE" == "darwin"* ]]; }
 is_linux() { [[ "$OSTYPE" == "linux-gnu"* ]]; }
 command_exists() { command -v "$1" &>/dev/null; }
+
+# Ask up front whether to install every dependency automatically, or confirm
+# each one individually. Defaults to "everything" when not run interactively
+# (e.g. piped from curl) so the script never hangs on a read.
+prompt_install_mode() {
+    if [[ ! -t 0 ]]; then
+        INSTALL_MODE="all"
+        return
+    fi
+    echo "How should dependencies be installed?"
+    echo "  1) Install everything automatically (default)"
+    echo "  2) Ask before installing each dependency"
+    local choice
+    read -rp "Choice [1]: " choice
+    if [[ "$choice" == "2" ]]; then
+        INSTALL_MODE="ask"
+        echo "Will ask before installing each dependency."
+    else
+        INSTALL_MODE="all"
+    fi
+}
+
+# Returns success if $1 should be installed: always in "all" mode, otherwise
+# prompts and returns the user's answer (default yes).
+should_install() {
+    [[ "$INSTALL_MODE" == "all" ]] && return 0
+    local reply
+    read -rp "Install $1? [Y/n] " reply
+    [[ ! "$reply" =~ ^[Nn] ]]
+}
 
 install_homebrew() {
     if command_exists brew; then
@@ -40,19 +71,46 @@ install_homebrew() {
 }
 
 install_brew_bundle() {
-    echo "Installing brew formulae from Brewfile..."
-    brew bundle install --file="$SCRIPT_DIR/Brewfile"
+    if [[ "$INSTALL_MODE" == "all" ]]; then
+        echo "Installing brew formulae from Brewfile..."
+        brew bundle install --file="$SCRIPT_DIR/Brewfile"
+        return
+    fi
+    local pkg
+    while IFS= read -r pkg; do
+        [[ -z "$pkg" ]] && continue
+        if should_install "$pkg"; then
+            brew install "$pkg"
+        else
+            echo "Skipping $pkg"
+        fi
+    done < <(sed -nE 's/^brew "([^"]+)".*/\1/p' "$SCRIPT_DIR/Brewfile")
 }
 
 install_apt_packages() {
     sudo apt-get update
-    sudo apt-get install -y \
-        fish tmux direnv stow rclone build-essential git curl
-    # These live in Ubuntu 'universe' / only-recent Debian. Install them in a
-    # separate call so one missing package on an older or minimal box doesn't
-    # abort the whole bootstrap before dotfiles/neovim/uv/gh/rust are set up.
-    sudo apt-get install -y xclip wl-clipboard pre-commit tree \
-        || echo "Warning: some optional apt packages were unavailable; continuing."
+    # Split into required vs. Ubuntu 'universe' / only-recent-Debian packages so
+    # one missing optional package on an older or minimal box doesn't abort the
+    # whole bootstrap before dotfiles/neovim/uv/gh/rust are set up.
+    local required=(fish tmux direnv rclone build-essential git curl)
+    local optional=(xclip wl-clipboard pre-commit tree)
+
+    if [[ "$INSTALL_MODE" == "all" ]]; then
+        sudo apt-get install -y "${required[@]}"
+        sudo apt-get install -y "${optional[@]}" \
+            || echo "Warning: some optional apt packages were unavailable; continuing."
+        return
+    fi
+
+    local pkg
+    for pkg in "${required[@]}" "${optional[@]}"; do
+        if should_install "$pkg"; then
+            sudo apt-get install -y "$pkg" \
+                || echo "Warning: $pkg was unavailable; continuing."
+        else
+            echo "Skipping $pkg"
+        fi
+    done
 }
 
 install_neovim_linux() {
@@ -116,60 +174,66 @@ ensure_fish_in_shells() {
     fi
 }
 
-# Move any pre-existing regular files at stow's targets out of the way so stow can take over.
-park_existing_targets() {
+# Older versions of this script symlinked dotfiles into place with GNU stow.
+# If those symlinks (including stow's folded directory symlinks, e.g. a
+# whole ~/.config/tmux pointing into this repo) are still around, remove
+# them first so real files/directories can take their place below.
+unstow_legacy_symlinks() {
+    command_exists stow || return 0
+    stow --dir="$DOTFILES_DIR" --target="$HOME" -D "${DOTFILE_PACKAGES[@]}" 2>/dev/null \
+        && echo "Removed legacy stow symlinks." || true
+}
+
+# Copy (not symlink) every dotfile into $HOME, so the repo checkout can be
+# deleted afterwards without taking any live config with it. Any pre-existing
+# file that differs from the repo's copy is backed up first, so nothing on
+# disk is destroyed silently.
+copy_dotfiles() {
     local pkg src_root rel target backup ts
+    unstow_legacy_symlinks
     ts="$(date +%Y%m%d%H%M%S)"
-    for pkg in "${STOW_PACKAGES[@]}"; do
+    for pkg in "${DOTFILE_PACKAGES[@]}"; do
         src_root="$DOTFILES_DIR/$pkg"
         [[ -d "$src_root" ]] || continue
         while IFS= read -r -d '' src; do
             rel="${src#$src_root/}"
             target="$HOME/$rel"
-            if [[ -e "$target" && ! -L "$target" ]]; then
-                # Skip if the target already resolves to the repo's own file through a
-                # folded parent directory symlink (stow tree-folding). Without this,
-                # `mv` would rename the repo's tracked file, corrupting the checkout.
-                if [[ "$target" -ef "$src" ]]; then
-                    continue
-                fi
-                backup="$target.pre-stow.$ts"
+            mkdir -p "$(dirname "$target")"
+            # A symlink is always replaced (even with identical content, since
+            # copying through it would silently overwrite whatever it points
+            # to elsewhere); a plain file is only backed up if it differs.
+            if [[ -L "$target" ]] || { [[ -e "$target" ]] && ! cmp -s "$src" "$target"; }; then
+                backup="$target.pre-setup.$ts"
                 echo "Backing up $target -> $backup"
                 mv "$target" "$backup"
             fi
+            cp "$src" "$target"
         done < <(find "$src_root" -type f -print0)
     done
+    echo "Dotfiles copied to \$HOME."
 }
 
-link_dotfiles() {
-    if ! command_exists stow; then
-        echo "stow not installed — cannot link dotfiles."
-        exit 1
-    fi
-    park_existing_targets
-    stow --dir="$DOTFILES_DIR" --target="$HOME" --restow "${STOW_PACKAGES[@]}"
-    echo "Dotfiles linked via stow."
-}
+prompt_install_mode
 
 if is_macos; then
     echo "Detected macOS"
     install_homebrew
     install_brew_bundle
-    install_rust
+    should_install "Rust (rustup)" && install_rust
 elif is_linux; then
     echo "Detected Linux"
     install_apt_packages
-    install_neovim_linux
-    install_uv_linux
-    install_gh_linux
-    install_rust
+    should_install "Neovim (from GitHub release)" && install_neovim_linux
+    should_install "uv" && install_uv_linux
+    should_install "gh (GitHub CLI)" && install_gh_linux
+    should_install "Rust (rustup)" && install_rust
 else
     echo "Unsupported OS."
     exit 1
 fi
 
 ensure_fish_in_shells
-link_dotfiles
+copy_dotfiles
 
 # If this repo is a git checkout and pre-commit is available, wire up the hooks.
 if [[ -d "$SCRIPT_DIR/.git" ]] \

@@ -4,9 +4,8 @@ A one-command bootstrap for fresh Linux and macOS boxes.
 
 I move computers (or crash them) often enough that I'd rather not redo the
 same dotfiles, package installs, and shell configuration by hand each time.
-`setup.sh` installs the tools I use, drops my dotfiles into `$HOME` via
-[GNU stow](https://www.gnu.org/software/stow/), and wires up pre-commit
-hooks if the repo is a git checkout.
+`setup.sh` installs the tools I use, copies my dotfiles into `$HOME`, and
+wires up pre-commit hooks if the repo is a git checkout.
 
 ## Quick start
 
@@ -16,12 +15,19 @@ cd ~/setup
 ./setup.sh
 ```
 
+At the start, `setup.sh` asks whether to install every dependency
+automatically or confirm each one individually — pick "ask" to skip tools
+you already manage some other way.
+
+Dotfiles are *copied* into `$HOME`, not symlinked, so once it's finished
+`~/setup` isn't referenced by anything on the machine and can be deleted.
+
 Re-running is safe: package installs are idempotent (`brew bundle` and
 `apt-get install` skip already-installed packages), and the from-source steps
 (Neovim, uv, Rust, gh) short-circuit when the tool is already present.
-`stow --restow` is idempotent, and pre-existing regular files at stow's
-targets are moved aside to `<path>.pre-stow.<timestamp>` before the symlinks
-are placed, so nothing on disk is destroyed silently.
+Dotfile copying is idempotent too — pre-existing files that differ from the
+repo's copy are moved aside to `<path>.pre-setup.<timestamp>` before being
+overwritten, so nothing on disk is destroyed silently.
 
 After `setup.sh`, three optional follow-ups:
 
@@ -40,7 +46,7 @@ chsh -s "$(command -v fish)"      # make fish the login shell
 |------|---------|
 | `fish` | shell |
 | `neovim`, `tmux` | editor, multiplexer |
-| `direnv`, `stow` | per-directory env vars, dotfile linking |
+| `direnv` | per-directory env vars |
 | `uv` | Python package and tool manager |
 | `gh`, `pre-commit` | GitHub CLI, git hook framework |
 | `rclone` | cloud storage sync |
@@ -66,7 +72,7 @@ official sources on Linux).
 setup.sh                          # entry point
 Brewfile                          # macOS package list
 .pre-commit-config.yaml           # hooks (formatting, linting, secrets)
-dotfiles/                         # stow packages — one dir per logical group
+dotfiles/                         # dotfile groups — one dir per logical group
   nvim/.config/nvim/init.vim
   fish/.config/fish/{config.fish,conf.d/*,functions/*}
   git/.config/git/{config,ignore}
@@ -83,15 +89,12 @@ cron/                             # opt-in monthly OS-update cron job
 
 ## Editing dotfiles
 
-Files under `dotfiles/` are symlinked into `$HOME` by stow, so editing
-`~/.config/fish/config.fish` *is* editing
-`dotfiles/fish/.config/fish/config.fish`. Commit and push, and the change
-propagates to every other box on the next `git pull`.
-
-A consequence of stow's directory-level tree-folding: if `~/.config/tmux`
-is itself a symlink to the repo (which it will be after stow), then
-`rm ~/.config/tmux/<file>` deletes the file from the repo, not just the
-symlink. Use `git rm` from inside the repo instead.
+Files under `dotfiles/` are *copied* into `$HOME` by `setup.sh`, not
+symlinked, so editing `~/.config/fish/config.fish` only changes that
+machine. To change a dotfile everywhere: edit the copy under `dotfiles/` in
+this repo, commit and push, then re-run `./setup.sh` (or `git pull` +
+`./setup.sh`) on each box to pick it up — pre-existing files that differ are
+backed up automatically, so nothing is lost.
 
 ## Pre-commit hooks
 
