@@ -247,4 +247,5 @@ echo
 echo "Done."
 echo "  - Make fish login shell: chsh -s \"\$(command -v fish)\""
 echo "  - Bootstrap SSH key:     $SCRIPT_DIR/scripts/ssh-bootstrap.sh"
+echo "  - Set desktop wallpaper: $SCRIPT_DIR/scripts/wallpapers.sh"
 echo "  - Schedule OS updates:   $SCRIPT_DIR/cron/install.sh"

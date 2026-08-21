@@ -34,6 +34,7 @@ After `setup.sh`, three optional follow-ups:
 ```sh
 chsh -s "$(command -v fish)"      # make fish the login shell
 ./scripts/ssh-bootstrap.sh        # generate an ed25519 key, copy it to clipboard
+./scripts/wallpapers.sh           # clone the wallpapers repo, pick + set one
 ./cron/install.sh                 # schedule monthly OS-package updates
 ```
 
@@ -79,6 +80,7 @@ dotfiles/                         # dotfile groups — one dir per logical group
   tmux/.config/tmux/tmux.conf
 scripts/
   ssh-bootstrap.sh                # ed25519 keygen + clipboard + GitHub URL
+  wallpapers.sh                   # clone wallpapers repo, pick + set background
 cron/                             # opt-in monthly OS-update cron job
   install.sh                      # generate update.sh, schedule it
   generate.py                     # render update.sh from template + commands.json
